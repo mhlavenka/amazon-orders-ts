@@ -30,6 +30,8 @@ export interface AmazonOrdersConfig {
    * all. Fails loudly with the URL and duration instead.
    */
   requestTimeoutMs: number;
+  /** Echo step-by-step progress (which URL is being fetched, which form matched, etc.) via the AuthIO. */
+  verbose: boolean;
 }
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.ledgernest', 'amazon');
@@ -45,6 +47,7 @@ export function defaultConfig(overrides: Partial<AmazonOrdersConfig> = {}): Amaz
     browserFallback: true,
     browserHeadless: true,
     requestTimeoutMs: 30_000,
+    verbose: false,
     ...overrides,
   };
 }

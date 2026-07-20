@@ -21,6 +21,29 @@ import { bootstrapCookiesViaBrowser } from './browserBootstrap';
 // which we'd otherwise silently lose.
 const MAX_REDIRECTS = 20;
 
+/**
+ * fetch()'s own AbortSignal only bounds getting the response (status/headers) — once that
+ * resolves, reading the body (response.text()/arrayBuffer()) is a separate, unbounded operation.
+ * If Amazon (or a WAF) sends headers promptly but then stalls or truncates the body — plausible
+ * anti-automation behavior, and reproduced live: a request logged its 200 response but then hung
+ * indefinitely with no further output — this races the read against its own timeout so that hangs
+ * there fail loudly too, not just ones during the initial connect.
+ */
+async function readBodyWithTimeout<T>(read: () => Promise<T>, timeoutMs: number, url: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new AmazonOrdersError(`Reading the response body from ${url} timed out after ${timeoutMs}ms.`)),
+      timeoutMs,
+    );
+  });
+  try {
+    return await Promise.race([read(), timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+
 export interface AmazonSessionOptions {
   username?: string;
   password?: string;
@@ -81,6 +104,10 @@ export class AmazonSession implements FormSubmitter {
     if (fs.existsSync(this.config.cookieJarPath)) fs.rmSync(this.config.cookieJarPath);
   }
 
+  private vlog(msg: string): void {
+    if (this.config.verbose) this.io.echo(`[verbose] ${msg}`);
+  }
+
   private async authCookiesStored(): Promise<boolean> {
     const cookieHeader = await this.cookieJar.getCookieString(this.constants.BASE_URL);
     return this.constants.COOKIES_SET_WHEN_AUTHENTICATED.every((name) => cookieHeader.includes(`${name}=`));
@@ -112,6 +139,7 @@ export class AmazonSession implements FormSubmitter {
       if (cookieHeader) headers.Cookie = cookieHeader;
       if (body !== undefined) headers['Content-Type'] = 'application/x-www-form-urlencoded';
 
+      this.vlog(`${currentMethod} ${currentUrl} (hop ${hop})...`);
       let response: Response;
       try {
         response = await fetch(currentUrl, {
@@ -131,6 +159,7 @@ export class AmazonSession implements FormSubmitter {
         }
         throw err;
       }
+      this.vlog(`-> ${response.status} ${response.url || currentUrl}`);
 
       const setCookies = response.headers.getSetCookie?.() ?? [];
       for (const cookieStr of setCookies) {
@@ -142,7 +171,9 @@ export class AmazonSession implements FormSubmitter {
       const isRedirect = [301, 302, 303, 307, 308].includes(response.status);
       const location = response.headers.get('location');
       if (isRedirect && location) {
-        await response.arrayBuffer().catch(() => undefined);
+        await readBodyWithTimeout(() => response.arrayBuffer(), this.config.requestTimeoutMs, currentUrl).catch(
+          () => undefined,
+        );
         currentUrl = new URL(location, currentUrl).toString();
         if (response.status === 303 || ((response.status === 301 || response.status === 302) && currentMethod !== 'GET' && currentMethod !== 'HEAD')) {
           currentMethod = 'GET';
@@ -151,7 +182,9 @@ export class AmazonSession implements FormSubmitter {
         continue;
       }
 
-      const html = await response.text();
+      this.vlog('Reading response body...');
+      const html = await readBodyWithTimeout(() => response.text(), this.config.requestTimeoutMs, currentUrl);
+      this.vlog(`Body read (${html.length} bytes).`);
       const result: RequestResult = { url: response.url || currentUrl, html, $: parseHtml(html), status: response.status };
       this.persistCookies();
       return result;
@@ -185,8 +218,11 @@ export class AmazonSession implements FormSubmitter {
       this.password = this.password ?? (await this.io.promptSecret('Amazon password'));
     }
 
+    this.vlog('Provisioning cookies (fetching home page)...');
     await this.provisionCookies();
+    this.vlog('Cookies provisioned.');
 
+    this.vlog('Fetching sign-in page...');
     let page: PageResponse = await this.get(this.constants.SIGN_IN_URL, this.constants.SIGN_IN_QUERY_PARAMS);
 
     this.isAuthenticated = false;
@@ -194,6 +230,7 @@ export class AmazonSession implements FormSubmitter {
     let attempts = 0;
 
     while (!this.isAuthenticated && attempts < this.config.maxAuthAttempts) {
+      this.vlog(`Checking auth state (attempt ${attempts + 1}/${this.config.maxAuthAttempts})...`);
       const hasSignOutNav = page.html.includes('nav-item-signout');
       const hasSignInPrompt = page.html.includes('Hello, sign in');
       if ((await this.authCookiesStored()) || (!hasSignInPrompt && hasSignOutNav)) {
@@ -202,10 +239,12 @@ export class AmazonSession implements FormSubmitter {
       }
 
       if (attempts > 0 && (!formFound || page.url.replace(/\/$/, '') === this.constants.BASE_URL)) {
+        this.vlog('Re-fetching sign-in page...');
         page = await this.get(this.constants.SIGN_IN_URL, this.constants.SIGN_IN_QUERY_PARAMS);
       }
       formFound = false;
 
+      this.vlog('Matching page against known auth forms...');
       const formResponse = await this.processForms(page);
       if (formResponse) {
         page = formResponse;
@@ -271,9 +310,13 @@ export class AmazonSession implements FormSubmitter {
     try {
       const matched = this.authForms.find((form) => form.select(page));
       if (!matched) return null;
+      this.vlog(`Matched ${matched.constructor.name} — filling...`);
 
       await matched.fill(this);
-      return await matched.submit(page, this);
+      this.vlog(`${matched.constructor.name} filled — submitting...`);
+      const result = await matched.submit(page, this);
+      this.vlog(`${matched.constructor.name} submitted.`);
+      return result;
     } catch (err) {
       if (err instanceof AmazonOrdersBrowserChallengeError && this.config.browserFallback) {
         this.io.echo(`${err.message}\nAttempting the browser fallback...`);
@@ -290,12 +333,14 @@ export class AmazonSession implements FormSubmitter {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 500));
 
+      this.vlog(`Fetching home page (provisioning attempt ${attempt + 1}/${maxAttempts})...`);
       let page: PageResponse = await this.get(this.constants.BASE_URL);
       const formResponse = await this.processForms(page);
       if (formResponse) page = formResponse;
 
       const badIndex = selectOne(page.$, page.$.root().get(0)!, sel.BAD_INDEX_SELECTOR);
       if (!badIndex) return;
+      this.vlog('Got a bad-index (mobile) page — retrying...');
     }
 
     throw new AmazonOrdersAuthError(

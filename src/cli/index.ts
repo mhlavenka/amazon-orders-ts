@@ -23,10 +23,11 @@ program
   .option('--domain <domain>', 'Amazon domain', 'amazon.ca')
   .option('--no-browser-fallback', "Don't fall back to a Playwright browser if Amazon serves a JS/bot challenge")
   .option('--headed', 'Run the Playwright browser fallback visibly instead of headless')
-  .action(async (opts: { domain: string; browserFallback: boolean; headed?: boolean }) => {
+  .option('--verbose', 'Echo step-by-step progress (which URL is being fetched, which form matched, etc.)')
+  .action(async (opts: { domain: string; browserFallback: boolean; headed?: boolean; verbose?: boolean }) => {
     const session = new AmazonSession({
       domain: opts.domain,
-      config: { browserFallback: opts.browserFallback, browserHeadless: !opts.headed },
+      config: { browserFallback: opts.browserFallback, browserHeadless: !opts.headed, verbose: !!opts.verbose },
     });
     try {
       await session.login();

@@ -187,6 +187,17 @@ export class CaptchaForm extends AuthForm {
       );
     } else if (solutionInput.length) {
       solution = solutionInput.attr('value') ?? '';
+    } else if (parent.find('#cvf-aamation-container').length) {
+      // An interactive visual challenge (Amazon's "WAF_ADVERSARIAL_SYNTHETIC_GRID" CAPTCHA type),
+      // rendered entirely by JS with no static image/text to solve — confirmed live. Genuinely
+      // needs a real browser, and likely an actual human (it's specifically designed to detect
+      // automated interaction, unlike the simpler token-based WAF gate at login's start).
+      throw new AmazonOrdersBrowserChallengeError(
+        "Amazon presented an interactive visual CAPTCHA (not a static image) that plain HTTP can't solve, and " +
+          'likely needs a human to click through it. Install the optional browser fallback ' +
+          '(`npm install playwright && npx playwright install chromium`) and run with `--headed` so you can ' +
+          'solve it yourself in the browser window that opens.',
+      );
     } else {
       throw new AmazonOrdersError(
         `CaptchaForm <img> or <input name='${this.solutionAttrKey}'> not found — check if Amazon changed their captcha flow.`,
@@ -220,7 +231,15 @@ export class AcicAuthBlocker extends AuthForm {
   }
 }
 
-const JS_ROBOT_TEXT_REGEX = /[.\s\S]*verify that you're not a robot[.\s\S]*Enable JavaScript[.\s\S]*/;
+// Plain substring checks, not a regex: a `[.\s\S]*X[.\s\S]*Y[.\s\S]*`-shaped pattern is
+// catastrophically slow on large inputs (backtracking-based engines like V8's try every split
+// point for each greedy wildcard) — confirmed live: this didn't finish in 30+ seconds against a
+// real ~1MB Amazon homepage's full text (cheerio's .text() includes embedded <script>/JSON
+// content too, so "large" here is not a hypothetical edge case). Two .includes() calls do the
+// same job in linear time.
+function looksLikeJsRobotChallenge(text: string): boolean {
+  return text.includes("verify that you're not a robot") && text.includes('Enable JavaScript');
+}
 
 /** Detects Amazon's "Enable JavaScript" bot-check interstitial. */
 export class JsAuthBlocker extends AuthForm {
@@ -229,7 +248,7 @@ export class JsAuthBlocker extends AuthForm {
   }
 
   override select(page: PageResponse): boolean {
-    if (JS_ROBOT_TEXT_REGEX.test(page.$.root().text())) {
+    if (looksLikeJsRobotChallenge(page.$.root().text())) {
       throw new AmazonOrdersBrowserChallengeError(
         'Amazon returned a JavaScript-based bot challenge (e.g. an AWS WAF challenge) that plain HTTP cannot ' +
           'solve. Install the optional browser fallback: `npm install playwright && npx playwright install ' +
