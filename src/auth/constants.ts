@@ -19,6 +19,15 @@ const REGION_ASSOC_HANDLES: Record<string, string> = {
   ca: 'caflex',
 };
 
+// The Python source hardcodes 'x-main' — the legacy .com cookie marking an authenticated
+// session. amazon.ca uses a region-suffixed scheme instead ("acbca" = amazon.ca's internal
+// marketplace code) — confirmed live: a real successful login produced x-acbca, at-acbca,
+// sess-at-acbca, sst-acbca, etc., but never x-main, so this check silently reported "not logged
+// in" for a perfectly valid session. x-acbca is the direct analog of x-main here.
+const REGION_AUTH_COOKIES: Record<string, string> = {
+  ca: 'x-acbca',
+};
+
 function normalizeBaseUrl(value: string): string {
   const v = value.trim().replace(/\/+$/, '');
   if (v.startsWith('http://') || v.startsWith('https://')) return v;
@@ -87,7 +96,7 @@ export function buildConstants(domain = 'amazon.ca'): Constants {
     TRANSACTION_HISTORY_URL: `${baseUrl}/cpe/yourpayments/transactions`,
     HISTORY_FILTER_QUERY_PARAM: 'timeFilter',
     BASE_HEADERS: baseHeaders,
-    COOKIES_SET_WHEN_AUTHENTICATED: ['x-main'],
+    COOKIES_SET_WHEN_AUTHENTICATED: [REGION_AUTH_COOKIES[tld] ?? 'x-main'],
     JS_ROBOT_TEXT_REGEX: /[.\s\S]*verify that you're not a robot[.\s\S]*Enable JavaScript[.\s\S]*/,
   };
 }
