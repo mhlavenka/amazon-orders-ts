@@ -28,8 +28,14 @@ program
       domain: opts.domain,
       config: { browserFallback: opts.browserFallback, browserHeadless: !opts.headed },
     });
-    await session.login();
-    console.log(`Logged in and saved session to ${session.config.cookieJarPath}`);
+    try {
+      await session.login();
+      console.log(`Logged in and saved session to ${session.config.cookieJarPath}`);
+    } finally {
+      // ConsoleIO holds a persistent readline interface open on stdin across prompts (see
+      // io.ts) — without closing it, the process would hang open after this command finishes.
+      session.io.close?.();
+    }
   });
 
 program
