@@ -112,12 +112,25 @@ export class AmazonSession implements FormSubmitter {
       if (cookieHeader) headers.Cookie = cookieHeader;
       if (body !== undefined) headers['Content-Type'] = 'application/x-www-form-urlencoded';
 
-      const response = await fetch(currentUrl, {
-        method: currentMethod,
-        headers,
-        body,
-        redirect: 'manual',
-      });
+      let response: Response;
+      try {
+        response = await fetch(currentUrl, {
+          method: currentMethod,
+          headers,
+          body,
+          redirect: 'manual',
+          signal: AbortSignal.timeout(this.config.requestTimeoutMs),
+        });
+      } catch (err) {
+        if (err instanceof Error && err.name === 'TimeoutError') {
+          throw new AmazonOrdersError(
+            `Request to ${currentUrl} timed out after ${this.config.requestTimeoutMs}ms with no response. ` +
+              'Amazon (or a proxy/WAF in front of it) may be silently holding the connection open rather than ' +
+              'rejecting it outright.',
+          );
+        }
+        throw err;
+      }
 
       const setCookies = response.headers.getSetCookie?.() ?? [];
       for (const cookieStr of setCookies) {

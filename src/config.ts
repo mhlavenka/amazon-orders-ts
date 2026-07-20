@@ -23,6 +23,13 @@ export interface AmazonOrdersConfig {
   /** Whether the Playwright fallback browser runs headless. Some bot checks specifically target
    * headless fingerprints — set false to run a visible browser if headless fails to pass. */
   browserHeadless: boolean;
+  /**
+   * Per-request timeout in ms. Amazon (or a WAF/proxy in front of it) can silently hold a
+   * connection open without ever responding to a suspicious-looking request instead of
+   * rejecting it outright — without a timeout, that hangs `request()` forever with no error at
+   * all. Fails loudly with the URL and duration instead.
+   */
+  requestTimeoutMs: number;
 }
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.ledgernest', 'amazon');
@@ -37,6 +44,7 @@ export function defaultConfig(overrides: Partial<AmazonOrdersConfig> = {}): Amaz
     maxAuthAttempts: 10,
     browserFallback: true,
     browserHeadless: true,
+    requestTimeoutMs: 30_000,
     ...overrides,
   };
 }
