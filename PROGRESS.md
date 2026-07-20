@@ -106,10 +106,38 @@ produces `dist/`).
       service is integrated, or (c) Playwright is added to execute the real challenge. This is a
       genuine architectural fork — flagged to the user, not decided unilaterally.
 
+11. **WAF challenge resolved.** User confirmed the same challenge on a mobile hotspot too, ruling
+    out IP-reputation — pointed at TLS-fingerprint-based bot detection (Node's TLS stack can't
+    mimic a real browser's, no matter the headers), which only a real browser's own network stack
+    fixes. User chose Playwright over a captcha-solving service. Added `browserBootstrap.ts`: on
+    an `AmazonOrdersBrowserChallengeError`, launch a real Chromium (optional peer dep, lazy
+    `require()` so it's not a hard dependency), navigate to the challenged URL, poll until the
+    challenge markup is gone (NOT `networkidle` — the challenge script's own polling keeps that
+    from ever firing), copy cookies into the jar, hand back to plain HTTP. Verified in an isolated
+    scratch dir against the live challenge: headless Chromium cleared it fine (no headless-
+    detection issue), got a real `aws-waf-token` cookie, and a plain-HTTP re-fetch with those
+    cookies came back 200 with the real ~1MB homepage instead of the 2KB challenge stub.
+    - **Privacy incident, self-caused:** while writing this feature's test fixtures, real data
+      from the user's actual MBNA statement (a merchant code, city, date, amount) got copied into
+      `test/cli/bankCsv.test.ts` instead of fictional placeholders, and pushed to the public repo;
+      PROGRESS.md also referenced the statement's filename (containing the card's last 4 digits).
+      Both fixed going forward (fictional data now). User was informed and explicitly chose to
+      leave the old commits as-is rather than rewrite history — don't revisit this without them
+      raising it.
+    - With the fallback working, login still failed with a confusing "unknown page" error — this
+      time for `/ap/signin` itself (a 404), not the WAF challenge. Traced to `openid.assoc_handle`:
+      the Python source hardcodes `usflex` (US-specific); amazon.ca needs `caflex`. Found by using
+      the now-working Playwright browser to click amazon.ca's real "Sign in" link and reading the
+      handle off the resulting URL. Fixed via a `REGION_ASSOC_HANDLES` map in `constants.ts`.
+      **Verified end-to-end with dummy credentials**: full flow now clears the WAF challenge,
+      finds and fills the real sign-in form, submits it, and gets back Amazon's own "Your password
+      is incorrect" — confirms the chain works up to actual credential validation.
+
 **Not yet done / open:**
-- **Real amazon.ca login is currently blocked by the AWS WAF JS challenge above** — nothing
-  downstream of `login()` has been verified against live data yet. This is the top item for next
-  session; check with the user whether they've decided on a path (different network / captcha
-  solver / Playwright) before assuming the parsers still need work — the parsers themselves
-  haven't been reached yet.
+- **A real user login (actual credentials/OTP) hasn't been confirmed yet** — only tested with a
+  deliberately-wrong dummy password, by design (the assistant should never handle a real
+  password). This is the very next thing to check with the user.
+- Everything downstream of login — `src/parsing/*`'s order/transaction parsers — is still
+  unverified against live markup. Don't assume they're broken OR working; nobody's reached them
+  yet with real data.
 - No CI workflow.

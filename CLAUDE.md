@@ -61,19 +61,23 @@ step for consumers.
 
 ## Known gaps / next steps
 
-- **Login against real amazon.ca is currently blocked by an AWS WAF JavaScript challenge.**
-  Confirmed live (2026-07-20): the very first anonymous request gets served
-  `awswaf.com/challenge.js` + `window.gokuProps` — a client-side puzzle only solvable by
-  executing real JS (a real browser) or a paid CAPTCHA-solving service. This is why the upstream
-  Python project ships optional `contrib/waf/{anticaptcha,capsolver,twocaptcha}.py` integrations
-  and a Playwright fallback — it's not a bug in this port, it's the wall the original project
-  exists to work around. `AcicAuthBlocker`/`JsAuthBlocker` do correctly detect and throw a clear
-  error for it now (see PROGRESS.md 2026-07-20 entry #10 for the `provisionCookies` bug that
-  initially masked this as a confusing "unknown page" error instead).
-  **Do not silently add Playwright or a captcha-solving service** — that's a real scope/cost
-  fork (extra heavy dependency, or a paid third-party API key) and the user hasn't decided yet.
-  Ask first. In the meantime the parsers (`src/parsing/*`) remain UNVERIFIED against live data —
-  nothing downstream of `login()` has been reached yet.
+- **Login now works end-to-end against real amazon.ca (verified 2026-07-20 with dummy
+  credentials — got back Amazon's real "Your password is incorrect")**, after fixing two stacked
+  bugs found live, in order:
+  1. An AWS WAF JS challenge (`awswaf.com/challenge.js`) on the very first anonymous request —
+     fixed with an optional Playwright fallback (`src/auth/browserBootstrap.ts`; see "Browser
+     fallback" in README). Also fixed a real bug along the way: `provisionCookies()` wasn't
+     running the blocker checks at all, so this surfaced as a confusing "unknown page" error
+     before the fallback existed.
+  2. Once past that, `/ap/signin` 404'd — the Python source's `openid.assoc_handle=usflex` is
+     US-specific; amazon.ca needs `caflex` (`src/auth/constants.ts`'s `REGION_ASSOC_HANDLES`).
+     Found by using the (by-then-working) Playwright browser to click amazon.ca's own real
+     "Sign in" link and reading the handle off the resulting URL.
+  **Still not verified**: a real user's actual credentials/OTP end-to-end (only tested with a
+  deliberately-wrong dummy password so far, to avoid the assistant ever handling a real
+  password), and everything downstream of login — `src/parsing/*`'s order/transaction parsers
+  are still unverified against live markup. That's the next thing to check once the user
+  confirms a real login succeeds.
 - Order-details full fetch (`--full-details` / `getOrderHistory({ fullDetails: true })`) is
   implemented but untested against real markup — same caveat as above, blocked on login first.
 - No CI workflow yet (`.github/workflows/` is empty) — add one before/at first npm publish.
