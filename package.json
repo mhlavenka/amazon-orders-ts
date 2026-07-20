@@ -2,7 +2,14 @@
   "name": "amazon-orders-ts",
   "version": "0.1.0",
   "description": "Fetch Amazon order & transaction history and match it against bank transactions. A TypeScript port of the login/parsing core of the Python amazon-orders library.",
-  "keywords": ["amazon", "orders", "transactions", "personal-finance", "scraping", "reconciliation"],
+  "keywords": [
+    "amazon",
+    "orders",
+    "transactions",
+    "personal-finance",
+    "scraping",
+    "reconciliation"
+  ],
   "license": "MIT",
   "author": "mhlavenka",
   "repository": {

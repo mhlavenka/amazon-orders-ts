@@ -9,6 +9,16 @@ const REGION_LANGUAGES: Record<string, string> = {
   'com.au': 'en-AU,en;q=0.9,en-US;q=0.8',
 };
 
+// The Python source hardcodes 'usflex' — an OpenID association handle Amazon's backend uses to
+// look up the marketplace config for the sign-in request. It's US-specific: using it on amazon.ca
+// makes /ap/signin 404 (confirmed live — a real browser's own "Sign in" link resolves to
+// assoc_handle=caflex). The Python project's own docs note non-.com domains aren't officially
+// supported for exactly this reason. Only .ca is confirmed; other TLDs would need discovering the
+// same way (open the site, click Sign in, read the assoc_handle off the resulting URL).
+const REGION_ASSOC_HANDLES: Record<string, string> = {
+  ca: 'caflex',
+};
+
 function normalizeBaseUrl(value: string): string {
   const v = value.trim().replace(/\/+$/, '');
   if (v.startsWith('http://') || v.startsWith('https://')) return v;
@@ -33,20 +43,20 @@ export interface Constants {
 export function buildConstants(domain = 'amazon.ca'): Constants {
   const baseUrl = normalizeBaseUrl(domain);
 
+  const host = new URL(baseUrl).host.toLowerCase();
+  const bareHost = host.startsWith('www.') ? host.slice(4) : host;
+  const tld = bareHost.startsWith('amazon.') ? bareHost.slice('amazon.'.length) : '';
+
   const signInQueryParams: Record<string, string> = {
     'openid.pape.max_auth_age': '0',
     'openid.return_to': `${baseUrl}/?ref_=nav_custrec_signin`,
     'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
-    'openid.assoc_handle': 'usflex',
+    'openid.assoc_handle': REGION_ASSOC_HANDLES[tld] ?? 'usflex',
     'openid.mode': 'checkid_setup',
     'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
     'openid.ns': 'http://specs.openid.net/auth/2.0',
   };
   const signInUrl = `${baseUrl}/ap/signin`;
-
-  const host = new URL(baseUrl).host.toLowerCase();
-  const bareHost = host.startsWith('www.') ? host.slice(4) : host;
-  const tld = bareHost.startsWith('amazon.') ? bareHost.slice('amazon.'.length) : '';
 
   const baseHeaders: Record<string, string> = {
     Accept:
