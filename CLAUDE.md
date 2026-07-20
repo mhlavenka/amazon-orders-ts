@@ -61,14 +61,21 @@ step for consumers.
 
 ## Known gaps / next steps
 
-- **The real amazon.ca smoke test hasn't been run yet.** Parsers were built from the Python
-  project's selectors + its own real (sanitized) test fixtures — one of which (transactions)
-  already happens to use `.ca`-formatted currency, which is reassuring but not a substitute for
-  a live run. Before trusting this for real data: `npx amazon-orders-ts login` then `match` with
-  a short `--months` window, and compare against what you see in the browser. If a selector
-  breaks, `AmazonOrdersParseError` names the exact field that failed.
+- **Login against real amazon.ca is currently blocked by an AWS WAF JavaScript challenge.**
+  Confirmed live (2026-07-20): the very first anonymous request gets served
+  `awswaf.com/challenge.js` + `window.gokuProps` — a client-side puzzle only solvable by
+  executing real JS (a real browser) or a paid CAPTCHA-solving service. This is why the upstream
+  Python project ships optional `contrib/waf/{anticaptcha,capsolver,twocaptcha}.py` integrations
+  and a Playwright fallback — it's not a bug in this port, it's the wall the original project
+  exists to work around. `AcicAuthBlocker`/`JsAuthBlocker` do correctly detect and throw a clear
+  error for it now (see PROGRESS.md 2026-07-20 entry #10 for the `provisionCookies` bug that
+  initially masked this as a confusing "unknown page" error instead).
+  **Do not silently add Playwright or a captcha-solving service** — that's a real scope/cost
+  fork (extra heavy dependency, or a paid third-party API key) and the user hasn't decided yet.
+  Ask first. In the meantime the parsers (`src/parsing/*`) remain UNVERIFIED against live data —
+  nothing downstream of `login()` has been reached yet.
 - Order-details full fetch (`--full-details` / `getOrderHistory({ fullDetails: true })`) is
-  implemented but untested against real markup — same caveat as above.
+  implemented but untested against real markup — same caveat as above, blocked on login first.
 - No CI workflow yet (`.github/workflows/` is empty) — add one before/at first npm publish.
 
 ## Working notes for future sessions
