@@ -61,25 +61,22 @@ step for consumers.
 
 ## Known gaps / next steps
 
-- **Login now works end-to-end against real amazon.ca (verified 2026-07-20 with dummy
-  credentials — got back Amazon's real "Your password is incorrect")**, after fixing two stacked
-  bugs found live, in order:
-  1. An AWS WAF JS challenge (`awswaf.com/challenge.js`) on the very first anonymous request —
-     fixed with an optional Playwright fallback (`src/auth/browserBootstrap.ts`; see "Browser
-     fallback" in README). Also fixed a real bug along the way: `provisionCookies()` wasn't
-     running the blocker checks at all, so this surfaced as a confusing "unknown page" error
-     before the fallback existed.
-  2. Once past that, `/ap/signin` 404'd — the Python source's `openid.assoc_handle=usflex` is
-     US-specific; amazon.ca needs `caflex` (`src/auth/constants.ts`'s `REGION_ASSOC_HANDLES`).
-     Found by using the (by-then-working) Playwright browser to click amazon.ca's own real
-     "Sign in" link and reading the handle off the resulting URL.
-  **Still not verified**: a real user's actual credentials/OTP end-to-end (only tested with a
-  deliberately-wrong dummy password so far, to avoid the assistant ever handling a real
-  password), and everything downstream of login — `src/parsing/*`'s order/transaction parsers
-  are still unverified against live markup. That's the next thing to check once the user
-  confirms a real login succeeds.
+- **Fully verified end-to-end against real amazon.ca and a real bank statement (2026-07-20).**
+  Real login, real transaction/order history fetch, real item-name parsing, and real matching all
+  confirmed working with a live account. Getting here required fixing a chain of bugs, each found
+  live (see PROGRESS.md for the full blow-by-blow — worth reading before assuming any of these
+  areas are still broken): an AWS WAF JS challenge on the first anonymous request (optional
+  Playwright fallback, `src/auth/browserBootstrap.ts`), `provisionCookies()` not running blocker
+  checks, `openid.assoc_handle=usflex` being US-specific (amazon.ca needs `caflex`), a
+  catastrophic-backtracking regex in `JsAuthBlocker` that non-deterministically hung on real
+  (~1MB) pages, a missing body-read timeout, a readline/raw-mode conflict in the password prompt,
+  `login()` not actually short-circuiting for an already-valid session despite its own docstring
+  claiming it did, and `COOKIES_SET_WHEN_AUTHENTICATED` checking for `x-main` when amazon.ca
+  actually uses `x-acbca`. The match window's lower bound was also widened (-1 → -3 business days)
+  after real data showed a refund posting to the bank a couple of days after its Amazon-side date.
 - Order-details full fetch (`--full-details` / `getOrderHistory({ fullDetails: true })`) is
-  implemented but untested against real markup — same caveat as above, blocked on login first.
+  implemented but still untested against real markup — everything verified so far used the
+  default (`fullDetails: false`) history-page-only parsing.
 - No CI workflow yet (`.github/workflows/` is empty) — add one before/at first npm publish.
 
 ## Working notes for future sessions

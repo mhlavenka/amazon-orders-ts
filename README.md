@@ -17,14 +17,15 @@ Defaults to **amazon.ca**, configurable via `domain`.
 
 ## Status / scope notes
 
-- **Confirmed against a live amazon.ca session (2026-07-20)**: the very first anonymous request
-  gets served a real AWS WAF JavaScript challenge (`awswaf.com/challenge.js`) — a puzzle only
-  solvable by executing real JS. Login itself is still 100% plain HTTP; the browser only
-  bootstraps past this one gate (see "Browser fallback" below), then hands off to the normal
-  HTTP flow for everything else. The order/transaction *parsers* haven't been verified against
-  real markup yet — that's the next step once login succeeds end-to-end.
+- **Fully verified against a live amazon.ca account and a real bank statement (2026-07-20)**:
+  real login, real transaction/order history, real item-name parsing, and real matching all
+  confirmed working end-to-end. Login itself is 100% plain HTTP; a browser only ever bootstraps
+  past a JS/bot challenge if one appears (see "Browser fallback" below), then hands straight back
+  to the normal HTTP flow for everything else — orders, transactions, matching.
 - This library never auto-solves visual/text captchas. If Amazon presents an actual CAPTCHA
-  during sign-in (as opposed to the JS/bot challenge above), it's surfaced to you interactively.
+  during sign-in, it's surfaced to you interactively (or, for a JS-rendered interactive one that
+  has no static text/image, via the browser fallback in `--headed` mode so you can solve it
+  yourself).
 - Login is always interactive and is never retried unattended: if your session expires,
   every call fails fast with an error telling you to re-run `login`.
 

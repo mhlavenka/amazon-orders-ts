@@ -193,11 +193,22 @@ produces `dist/`).
       `REGION_ASSOC_HANDLES` maps. Verified directly against the real cookie jar on disk:
       `hasStoredSession()` now correctly returns `true`.
 
+15. **Full pipeline verified end-to-end against real data — the smoke test's original goal.**
+    `match --csv <real MBNA statement> --months 1` ran clean: fetched 11 real Amazon transactions
+    + 48 real orders (with correct real item titles — AirPods, a USB capture card, book titles,
+    etc. — confirming `src/parsing/orders.ts`/`transactions.ts` parse real markup correctly), and
+    produced 6 high-confidence exact matches against the real statement with items attached. The
+    handful of "unmatched" rows all had mundane explanations, not bugs: 2 bank rows were just
+    outside the `--months 1` fetch window (~30 days back from *today*, not from the statement's
+    own date range); 2 Amazon transactions were genuinely too recent to be in the statement yet;
+    2 pairs were a real near-miss (see #16 below).
+16. **Match window widened from -1 to -3 business days (lower bound)**, per user's explicit choice
+    after seeing the near-miss above: a refund's Amazon-side date was 2 business days before its
+    bank posting date, just outside the original -1 bound. Purchases post to the bank quickly
+    after Amazon; refunds evidently can lag more. `matching/dates.ts`'s `withinMatchWindow` and its
+    tests updated accordingly.
+
 **Not yet done / open:**
-- Everything downstream of login — `src/parsing/*`'s order/transaction parsers — is still
-  unverified against live markup. Next step: run `match --csv <real-statement.csv> --months 1`
-  and see whether real transaction/order pages parse correctly (or which field
-  `AmazonOrdersParseError` names if not).
 - If another region/TLD is ever added, remember it likely needs its OWN entries in all three
   region maps (`REGION_LANGUAGES`, `REGION_ASSOC_HANDLES`, `REGION_AUTH_COOKIES`) — three separate
   US-specific assumptions have now been found hardcoded from the Python source, each discovered
