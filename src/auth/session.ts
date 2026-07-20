@@ -114,6 +114,17 @@ export class AmazonSession implements FormSubmitter {
   }
 
   /**
+   * Checks the persisted cookie jar for a valid session — no network request at all. Callers
+   * (e.g. the CLI's `match` command) should use this rather than fetching a page and guessing
+   * from its markup whether it looks logged-in, which is unreliable (Amazon's homepage doesn't
+   * consistently include a stable "signed in" marker across every render/experiment) and, worse,
+   * touches the network before the caller even knows a real login is needed.
+   */
+  async hasStoredSession(): Promise<boolean> {
+    return this.authCookiesStored();
+  }
+
+  /**
    * Low-level request, following redirects manually (see MAX_REDIRECTS comment) so cookies set
    * on intermediate hops are captured into the jar before the next hop is requested.
    */
@@ -213,6 +224,17 @@ export class AmazonSession implements FormSubmitter {
    * it will just re-confirm auth cookies and return immediately.
    */
   async login(): Promise<void> {
+    // Bug fixed here: this used to always provision cookies + fetch the sign-in page first and
+    // only check stored-session validity partway through the resulting flow — meaning re-running
+    // login() on an already-valid session could rotate/disturb its cookies via that fresh
+    // homepage fetch before ever confirming a real login was even needed. Check first, touch
+    // nothing if there's nothing to do.
+    if (await this.hasStoredSession()) {
+      this.vlog('Valid session already stored — skipping login.');
+      this.isAuthenticated = true;
+      return;
+    }
+
     if (!this.username || !this.password) {
       this.username = this.username ?? (await this.io.prompt('Amazon email'));
       this.password = this.password ?? (await this.io.promptSecret('Amazon password'));

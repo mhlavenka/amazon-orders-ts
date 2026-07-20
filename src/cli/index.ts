@@ -12,7 +12,7 @@ import type { AmazonOrderRef, AmazonTransaction, BankTransaction } from '../matc
 import type { Order } from '../parsing/types';
 import { loadBankCsv } from './bankCsv';
 import { buildReportView, formatReportTable, type ReportView } from './report';
-import { AmazonOrdersAuthRedirectError, AmazonOrdersError } from '../errors';
+import { AmazonOrdersError } from '../errors';
 
 const program = new Command();
 program.name('amazon-orders-ts').description('Fetch Amazon order/transaction history and match it against bank transactions.');
@@ -51,17 +51,11 @@ program
     console.log(`Loaded ${bankTxns.length} bank rows from ${opts.csv}`);
 
     const session = new AmazonSession({ domain: opts.domain });
-    const authed = await session
-      .get(session.constants.BASE_URL)
-      .then((page) => {
-        session.checkResponse(page);
-        return page.html.includes('nav-item-signout');
-      })
-      .catch((err) => {
-        if (err instanceof AmazonOrdersAuthRedirectError) return false;
-        throw err;
-      });
-    if (!authed) {
+    // Checks the stored cookie jar only — no network request, and no chance of disturbing a
+    // valid session by fetching a page first just to guess "logged in?" from its markup (that
+    // heuristic was unreliable in practice: Amazon's homepage doesn't consistently include a
+    // stable "signed in" marker in the raw response).
+    if (!(await session.hasStoredSession())) {
       throw new AmazonOrdersError('Not logged in (or the session expired). Run `amazon-orders-ts login` first.');
     }
     session.isAuthenticated = true;
