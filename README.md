@@ -85,17 +85,43 @@ as-is). See `src/cli/bankCsv.ts` for the exact synonym list.
 
 ## Smoke test first (before trusting the parsers)
 
-Per the porting plan, verify the real markup before relying on this:
+Per the porting plan, verify the real markup before relying on this. Worked example — build the
+CLI, log in, then run `match` against a real card statement CSV (any bank/card export works, not
+just our own sample schema — see the column-synonym note above). Output shown is illustrative,
+not a real run:
 
 ```bash
-npx amazon-orders-ts login
-npx amazon-orders-ts match --csv samples/bank-sample.csv --months 1
+npm run build
+node dist/cli/index.js login
+--> Amazon email: you@example.com
+--> Amazon password: ************
+Logged in and saved session to /home/you/.ledgernest/amazon/cookies.json
+
+node dist/cli/index.js match --csv examples/your-statement.csv --months 1
+Loaded 11 bank rows from examples/your-statement.csv
+Fetching ~1 month(s) of Amazon transaction history...
+Fetched 9 Amazon transactions.
+Fetching 2026 order history (for item names)...
+Fetched 6 orders.
+
+Matches (7)
+  [high/exact] AMAZON.CA* AB1CD23EF TORONTO ON -26.47  <-  111-1111111-1111111
+      items: USB-C Cable, Kitchen Sponges
+  ...
 ```
 
-If login fails, the error will say which step of the flow it broke on (sign-in form, MFA,
-captcha, or a JS/bot challenge it can't solve). If `match` runs but the report looks wrong,
-capture the page HTML by adjusting `AmazonSession.request()` to dump `result.html` for the
-transaction/order pages and compare against `src/auth/selectors.ts`.
+If `login` fails, the error names which step of the flow it broke on (sign-in form, MFA, captcha,
+or a JS/bot challenge — see "Browser fallback" above if it's the latter). If `match` runs but the
+report looks wrong, capture the page HTML by adjusting `AmazonSession.request()` to dump
+`result.html` for the transaction/order pages and compare against `src/auth/selectors.ts` —
+`AmazonOrdersParseError` names the exact field that failed to parse.
+
+Real-world note: real bank/card exports rarely match any invented schema, and Amazon's own
+descriptor text varies more than you'd expect — `src/cli/bankCsv.ts`'s column matching and
+`matching/filter.ts`'s `DEFAULT_AMAZON_DESCRIPTOR_PATTERNS` were both broadened after testing
+against a real MBNA statement (`Posted Date,Payee,Address,Amount`, plain `AMAZON*` descriptors
+with no `.CA`). If your bank's format or descriptor style trips up either one, that's a real gap
+worth fixing the same way, not a one-off workaround.
 
 ## Matching engine (pure, no network)
 

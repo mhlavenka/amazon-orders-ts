@@ -12,20 +12,20 @@ describe('parseBankCsvText', () => {
   it('parses an MBNA-style export (Posted Date/Payee/Address/Amount, MM/DD/YYYY, no id/currency)', () => {
     const csv =
       'Posted Date,Payee,Address,Amount\n' +
-      '06/16/2026,"AMAZON.CA* F70VO7S83 VANCOUVER BC","VANCOUVER ",-26.47\n' +
-      '07/06/2026,"PAYMENT"," ",514.23\n';
+      '01/15/2026,"AMAZON.CA* AB1CD23EF TORONTO ON","TORONTO ",-19.99\n' +
+      '01/20/2026,"PAYMENT"," ",250.00\n';
 
     const rows = parseBankCsvText(csv);
 
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({
-      date: '2026-06-16',
-      description: 'AMAZON.CA* F70VO7S83 VANCOUVER BC',
-      amount: -26.47,
+      date: '2026-01-15',
+      description: 'AMAZON.CA* AB1CD23EF TORONTO ON',
+      amount: -19.99,
       currency: 'CAD',
     });
     expect(rows[0].id).toBe('row-1'); // no id column -> synthesized
-    expect(rows[1]).toMatchObject({ date: '2026-07-06', description: 'PAYMENT', amount: 514.23 });
+    expect(rows[1]).toMatchObject({ date: '2026-01-20', description: 'PAYMENT', amount: 250.0 });
   });
 
   it('matches header names case- and whitespace-insensitively', () => {

@@ -48,8 +48,8 @@ a personal, evolving package with no publish-step friction.
    (`samples/amazon-transactions-sample.json`) deliberately covers all four outcomes (exact,
    combination, review-queue ambiguity, unmatched-Amazon "gift card" case) — verified via a
    scratch script before wiring the UI around it.
-8. **Real-data test**: user dropped a real MBNA card statement (`examples/Jul2026_9245.csv`,
-   gitignored, never committed) for local testing. Two real findings from it:
+8. **Real-data test**: user dropped a real MBNA card statement CSV (filename redacted here —
+   gitignored, never committed) into `examples/` for local testing. Two real findings from it:
    - The CSV loader only understood our own invented `id,date,description,amount,currency`
      schema. Rewrote `src/cli/bankCsv.ts` to match column names case/whitespace-insensitively
      with synonyms (`Posted Date`/`Payee`/`Amount` etc.) and accept `MM/DD/YYYY` dates, since real
