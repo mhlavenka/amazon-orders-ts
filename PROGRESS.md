@@ -133,10 +133,42 @@ produces `dist/`).
       finds and fills the real sign-in form, submits it, and gets back Amazon's own "Your password
       is incorrect" — confirms the chain works up to actual credential validation.
 
+12. **Real login attempt hung indefinitely (several minutes, Ctrl+C unresponsive) even with the
+    request-timeout fix from #11.** User declined to share real credentials for the assistant to
+    reproduce directly (right call — no `.env` workaround, kept the "never handle a real password"
+    boundary). Diagnosed via a `config.verbose` flag added specifically for this (echoes each
+    fetch/form-match step): the hang was actually in **two separate bugs**, found in order:
+    - `io.ts`'s password masking manually toggled stdin raw mode, while the OTP prompt right after
+      used a separate `readline.Interface` — reproduced in isolation (piped input): after a masked
+      password prompt, a subsequent readline-based prompt never received further input at all.
+      Rewrote to use one persistent `readline.Interface` for every prompt, masking via the
+      standard `_writeToOutput` intercept technique instead of raw mode. (Also: `AmazonSession`
+      constructs a `ConsoleIO` by default even for non-interactive commands, so the interface is
+      now lazy — created on first prompt only — plus `AuthIO.close()` so the CLI can release
+      stdin; otherwise even `match` would hang open forever after finishing.)
+    - **The real one**: `JsAuthBlocker`'s regex (`[.\s\S]*X[.\s\S]*Y[.\s\S]*`) is catastrophically
+      slow — didn't finish in 30+ seconds against a plain 1MB string in isolated timing. cheerio's
+      `.text()` includes embedded `<script>`/JSON content, so a real ~1MB Amazon page hit this on
+      *every* page load, non-deterministically depending on content (explains why some earlier
+      dummy-credential runs finished fast and this one didn't). Replaced with two `.includes()`
+      checks. Also added a body-read timeout (`fetch()`'s own `AbortSignal` only bounds getting
+      the response, not reading the body after — a stalled/truncated body had zero protection).
+    - With both fixed, a full dummy-credential run completes in seconds through cookie
+      provisioning → sign-in → claim/redirect, and hits a new, well-defined wall: an **interactive
+      visual CAPTCHA** (`WAF_ADVERSARIAL_SYNTHETIC_GRID_V2_LEVEL_2`, no static image/text, JS-
+      rendered) on a post-signin verification step. Wired into the existing browser fallback:
+      `browserBootstrap.ts` now injects the session's existing cookies into the Playwright context
+      first (this challenge is mid-flow, tied to cookies already established over HTTP — unlike
+      the anonymous home-page WAF gate, a fresh browser context won't do), non-headless wait
+      raised to 180s (this challenge type likely needs an actual human to click through it, not
+      just a real browser engine), and `CaptchaForm` distinguishes this case (via the
+      `#cvf-aamation-container` marker) from a genuine selector mismatch.
+
 **Not yet done / open:**
-- **A real user login (actual credentials/OTP) hasn't been confirmed yet** — only tested with a
-  deliberately-wrong dummy password, by design (the assistant should never handle a real
-  password). This is the very next thing to check with the user.
+- **A real user login (actual credentials/OTP) still hasn't been confirmed end-to-end.** Next
+  step: user tries again with `--headed` in case the interactive CAPTCHA above reappears (it may
+  not — it's plausible repeated automated dummy-credential attempts from this same session are
+  what triggered the extra verification step, not something a normal first real attempt hits).
 - Everything downstream of login — `src/parsing/*`'s order/transaction parsers — is still
   unverified against live markup. Don't assume they're broken OR working; nobody's reached them
   yet with real data.
