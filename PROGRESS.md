@@ -164,12 +164,15 @@ produces `dist/`).
       just a real browser engine), and `CaptchaForm` distinguishes this case (via the
       `#cvf-aamation-container` marker) from a genuine selector mismatch.
 
+13. **Real login confirmed working end-to-end.** User ran plain `login` (no `--headed` needed) —
+    succeeded first try, no CAPTCHA, no hang: "Logged in and saved session to
+    ~/.ledgernest/amazon/cookies.json". Confirms the interactive CAPTCHA in #12 was very likely
+    triggered by the assistant's own repeated automated dummy-credential test attempts earlier in
+    this session, not something a normal login hits. Login is now considered solid.
+
 **Not yet done / open:**
-- **A real user login (actual credentials/OTP) still hasn't been confirmed end-to-end.** Next
-  step: user tries again with `--headed` in case the interactive CAPTCHA above reappears (it may
-  not — it's plausible repeated automated dummy-credential attempts from this same session are
-  what triggered the extra verification step, not something a normal first real attempt hits).
 - Everything downstream of login — `src/parsing/*`'s order/transaction parsers — is still
-  unverified against live markup. Don't assume they're broken OR working; nobody's reached them
-  yet with real data.
+  unverified against live markup. Next step: run `match --csv <real-statement.csv> --months 1`
+  and see whether real transaction/order pages parse correctly (or which field
+  `AmazonOrdersParseError` names if not).
 - No CI workflow.
