@@ -1,0 +1,62 @@
+{
+  "name": "amazon-orders-ts",
+  "version": "0.1.0",
+  "description": "Fetch Amazon order & transaction history and match it against bank transactions. A TypeScript port of the login/parsing core of the Python amazon-orders library.",
+  "keywords": ["amazon", "orders", "transactions", "personal-finance", "scraping", "reconciliation"],
+  "license": "MIT",
+  "author": "mhlavenka",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mhlavenka/amazon-orders-ts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mhlavenka/amazon-orders-ts/issues"
+  },
+  "homepage": "https://github.com/mhlavenka/amazon-orders-ts#readme",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./matching": {
+      "types": "./dist/matching/index.d.ts",
+      "default": "./dist/matching/index.js"
+    }
+  },
+  "bin": {
+    "amazon-orders-ts": "dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev:cli": "tsx src/cli/index.ts",
+    "demo:web": "tsx examples/web-tester/server.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "commander": "^12.1.0",
+    "csv-parse": "^5.5.6",
+    "tough-cookie": "^4.1.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/tough-cookie": "^4.0.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}

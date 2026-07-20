@@ -1,0 +1,22 @@
+node_modules/
+dist/
+coverage/
+
+# Python reference clone — checked out locally to read as a porting spec, never published or committed.
+reference/
+
+# Local session/config artifacts (cookie jar, sqlite match store) when running the CLI from a repo checkout.
+.ledgernest/
+*.sqlite
+*.sqlite3
+
+# Captured HTML page dumps from the smoke test — may contain account-identifying markup.
+output/
+*.html
+!test/fixtures/**/*.html
+
+.env
+*.log
+
+# Real personal bank/card statements dropped in examples/ for local testing — never committed.
+examples/*.csv

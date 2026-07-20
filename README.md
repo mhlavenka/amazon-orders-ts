@@ -1,0 +1,154 @@
+# amazon-orders-ts
+
+Fetch Amazon order & transaction history over plain HTTP (no browser automation) and match it
+against your bank transactions — built for personal finance reconciliation (e.g.
+[LedgerNest](https://github.com/mhlavenka/ledgerNest)).
+
+This is a **TypeScript port of the login flow and page-parsing approach** from the Python
+[`amazon-orders`](https://github.com/alexdlaird/amazon-orders) project by Alex Laird (MIT
+licensed — see [NOTICE](./NOTICE)). Only what's needed for reconciliation was ported:
+session/login, transaction history (card charges), and order history (order numbers + line
+items). Returns, invoices, Whole Foods orders, and the full order-details field set (subtotal,
+tax breakdown, gift cards, promotions, etc.) are intentionally **not** ported — out of scope for
+matching bank transactions to orders.
+
+Defaults to **amazon.ca**, configurable via `domain`.
+
+## Status / scope notes
+
+- The parsers were built from the Python project's own selectors and real (sanitized)
+  `amazon.com` test fixtures — including one transaction-history fixture that already uses
+  `.ca`-formatted currency. They have **not yet been run against a live amazon.ca session**.
+  Before relying on this for real data, run the smoke test below and compare.
+- This library never auto-solves captchas and never drives a real browser. If Amazon serves a
+  JavaScript-based bot challenge (ACIC / "Enable JavaScript" interstitial), it surfaces a clear
+  error explaining that — solving it would require something like Playwright, which is not
+  implemented here (see `src/auth/forms.ts`).
+- Login is always interactive and is never retried unattended: if your session expires,
+  every call fails fast with an error telling you to re-run `login`.
+
+## Install
+
+```bash
+npm install amazon-orders-ts
+```
+
+Requires Node **>=22.5.0** (uses the built-in `node:sqlite` module for the match store — no
+native/C++ build step needed to install this package).
+
+## Quick start (library)
+
+```ts
+import { AmazonSession, getTransactionHistory, getOrderHistory } from 'amazon-orders-ts';
+
+const session = new AmazonSession({ domain: 'amazon.ca' }); // prompts for email/password/OTP on first run
+await session.login(); // persists cookies to ~/.ledgernest/amazon/cookies.json
+
+const transactions = await getTransactionHistory(session, { days: 90 });
+const orders = await getOrderHistory(session, { year: 2026 }); // add fullDetails: true for items on cancelled/partial orders
+```
+
+Re-running `session.login()` reuses the persisted cookie jar; if it's stale, `checkResponse()`
+throws `AmazonOrdersAuthRedirectError` telling you to log in again — it will not retry silently.
+
+## CLI (thin wrapper for manual testing)
+
+```bash
+npx amazon-orders-ts login                          # interactive: email, password, OTP if prompted
+npx amazon-orders-ts match --csv bank.csv --months 3 # fetches + matches + saves + prints a report
+npx amazon-orders-ts report --format json            # re-prints the last report (json|table)
+```
+
+`match` accepts our own `id,date,description,amount,currency` schema (see
+[`samples/bank-sample.csv`](./samples/bank-sample.csv)) or common real export headers —
+column matching is case/whitespace-insensitive with synonyms (e.g. MBNA's
+`Posted Date,Payee,Address,Amount`, no `id`/`currency` columns, `MM/DD/YYYY` dates all work
+as-is). See `src/cli/bankCsv.ts` for the exact synonym list.
+
+## Smoke test first (before trusting the parsers)
+
+Per the porting plan, verify the real markup before relying on this:
+
+```bash
+npx amazon-orders-ts login
+npx amazon-orders-ts match --csv samples/bank-sample.csv --months 1
+```
+
+If login fails, the error will say which step of the flow it broke on (sign-in form, MFA,
+captcha, or a JS/bot challenge it can't solve). If `match` runs but the report looks wrong,
+capture the page HTML by adjusting `AmazonSession.request()` to dump `result.html` for the
+transaction/order pages and compare against `src/auth/selectors.ts`.
+
+## Matching engine (pure, no network)
+
+```ts
+import { matchTransactions } from 'amazon-orders-ts/matching';
+
+const report = matchTransactions(bankTxns, amazonTxns);
+// report.matches        — [{ bankTxnId, amazonTxnIds, confidence: 'high'|'medium'|'low', pass }]
+// report.reviewQueue     — ambiguous bank rows the algorithm wouldn't guess on
+// report.unmatchedBank   — Amazon-descriptor bank rows with no match
+// report.unmatchedAmazon — Amazon transactions with no bank match (often gift-card-funded)
+```
+
+Matching runs three passes: exact amount+date, tie-break (closest date, then an order-number
+fragment in the bank descriptor), then a combination pass for split-shipment charges (subsets of
+up to 3 same-order Amazon transactions). It's a pure function of its inputs — persisting results
+via `MatchStore` (`node:sqlite`-backed, keyed by `(bankTxnId, amazonTxnId)`) is naturally
+idempotent across re-runs.
+
+### One transaction at a time (the LedgerNest integration shape)
+
+The batch `matchTransactions()` above is what the CLI/web tester use, but a host app like
+LedgerNest typically has one register row in hand and wants "does this match an Amazon charge,
+and what did I buy?" — `findAmazonMatchForTransaction` wraps the same engine for that:
+
+```ts
+import { findAmazonMatchForTransaction, type MatchStore } from 'amazon-orders-ts/matching';
+
+// amazonTxns/orders fetched once (e.g. daily) via getTransactionHistory()/getOrderHistory() and
+// cached; store is the same MatchStore used to persist results, so already-matched Amazon
+// transactions are excluded before each lookup — otherwise one Amazon charge could satisfy two
+// different bank rows.
+const pool = store.filterUnconsumed(amazonTxns);
+const result = findAmazonMatchForTransaction(bankTxn, pool, orders);
+
+if (result.matched) {
+  // result.items -> ["USB-C Cable", "Kitchen Sponges"], result.isRefund, result.confidence, ...
+  store.saveMatches([{ bankTxnId: bankTxn.id, amazonTxnIds: result.amazonTxnIds, confidence: result.confidence!, pass: result.pass! }]);
+} else if (result.ambiguousCandidates) {
+  // multiple equally-plausible Amazon transactions — surface for manual review, don't guess
+}
+```
+
+### Try the matching engine in a browser
+
+No Amazon login needed — paste a bank CSV and an Amazon-transactions JSON and see the report
+rendered as tables:
+
+```bash
+npm run demo:web
+# open http://localhost:4321 — sample data loads automatically
+```
+
+See [`examples/web-tester`](./examples/web-tester) (a ~150-line dependency-free Node `http`
+server + single static HTML page).
+
+## Development
+
+```bash
+npm install
+npm test        # vitest — matching unit tests + parser tests against real HTML fixtures
+npm run build   # tsc -> dist/
+```
+
+`reference/` (gitignored) is a local clone of the Python project used as the porting spec — see
+`amazon-orders/PORTING-NOTES` in commit history, or just `git clone
+https://github.com/alexdlaird/amazon-orders reference` if you need to re-check something against
+the original source.
+
+## License
+
+MIT — see [LICENSE](./LICENSE). Portions of the login-flow and parsing approach are ported from
+[`amazon-orders`](https://github.com/alexdlaird/amazon-orders) (MIT, Alex Laird) — see
+[NOTICE](./NOTICE).
