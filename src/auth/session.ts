@@ -187,10 +187,9 @@ export class AmazonSession implements FormSubmitter {
       }
       formFound = false;
 
-      const matched = this.authForms.find((form) => form.select(page));
-      if (matched) {
-        await matched.fill(this);
-        page = await matched.submit(page, this);
+      const formResponse = await this.processForms(page);
+      if (formResponse) {
+        page = formResponse;
         formFound = true;
       }
 
@@ -237,12 +236,29 @@ export class AmazonSession implements FormSubmitter {
     }
   }
 
+  /**
+   * Tries each auth form/blocker against `page`; runs the matched one's fill+submit and returns
+   * the resulting page, or null if nothing matched. Blockers (ACIC/JS-challenge detection) throw
+   * directly from `select()`, so calling this is also how those get a chance to fire — including
+   * on unauthenticated pages, where Amazon can present a bot challenge before login even starts.
+   */
+  private async processForms(page: PageResponse): Promise<PageResponse | null> {
+    const matched = this.authForms.find((form) => form.select(page));
+    if (!matched) return null;
+
+    await matched.fill(this);
+    return matched.submit(page, this);
+  }
+
   private async provisionCookies(): Promise<void> {
     const maxAttempts = 5;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 500));
 
-      const page = await this.get(this.constants.BASE_URL);
+      let page: PageResponse = await this.get(this.constants.BASE_URL);
+      const formResponse = await this.processForms(page);
+      if (formResponse) page = formResponse;
+
       const badIndex = selectOne(page.$, page.$.root().get(0)!, sel.BAD_INDEX_SELECTOR);
       if (!badIndex) return;
     }
