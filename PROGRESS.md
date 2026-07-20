@@ -170,9 +170,37 @@ produces `dist/`).
     triggered by the assistant's own repeated automated dummy-credential test attempts earlier in
     this session, not something a normal login hits. Login is now considered solid.
 
+14. **`match` claimed "not logged in" right after a successful login, then a second `login`
+    hit a fresh "unknown page" error.** Two bugs, same root shape as before:
+    - `login()`'s docstring already claimed "safe to call again on an existing session — it will
+      just re-confirm auth cookies and return immediately", but the implementation never actually
+      did this: it always ran `provisionCookies()` (a fresh homepage fetch) before checking
+      `authCookiesStored()`. Re-running `login()` on an already-valid session could disturb its
+      cookies via that unnecessary fetch before ever confirming a login was even needed.
+    - `match`'s own pre-check was a separate, unreliable heuristic: fetch the home page and guess
+      "logged in?" from whether the markup happens to include "nav-item-signout" text.
+    - Fixed by adding `AmazonSession.hasStoredSession()` (checks the persisted cookie jar only, no
+      network) and using it in both places — `login()` now exits immediately if already
+      authenticated, `match` checks stored-session validity directly.
+    - With that in place, `hasStoredSession()` STILL returned false. Since this repo lives on the
+      same machine/user as the person testing it, inspected their real persisted cookie jar file
+      directly (safe — it holds only session tokens, never the password) instead of guessing:
+      **same class of bug as the `assoc_handle` one.** `COOKIES_SET_WHEN_AUTHENTICATED` (ported
+      from Python) checks for a cookie literally named `x-main` — the legacy `.com` name. A real
+      successful login on amazon.ca produces `x-acbca`, `at-acbca`, `sess-at-acbca`, `sst-acbca`
+      (region-suffixed scheme, "acbca" = amazon.ca's marketplace code) — never `x-main`. Added
+      `REGION_AUTH_COOKIES` (`ca: 'x-acbca'`), alongside the existing `REGION_LANGUAGES`/
+      `REGION_ASSOC_HANDLES` maps. Verified directly against the real cookie jar on disk:
+      `hasStoredSession()` now correctly returns `true`.
+
 **Not yet done / open:**
 - Everything downstream of login — `src/parsing/*`'s order/transaction parsers — is still
   unverified against live markup. Next step: run `match --csv <real-statement.csv> --months 1`
   and see whether real transaction/order pages parse correctly (or which field
   `AmazonOrdersParseError` names if not).
+- If another region/TLD is ever added, remember it likely needs its OWN entries in all three
+  region maps (`REGION_LANGUAGES`, `REGION_ASSOC_HANDLES`, `REGION_AUTH_COOKIES`) — three separate
+  US-specific assumptions have now been found hardcoded from the Python source, each discovered
+  the same way (inspect real markup/cookies from a live session), so don't assume amazon.ca's
+  values (`caflex`, `x-acbca`) generalize to other TLDs.
 - No CI workflow.
