@@ -19,11 +19,18 @@ function parseIsoDateUtc(iso: string): Date {
   return new Date(`${iso}T00:00:00Z`);
 }
 
-/** True if `amazonDate` falls within [bankDate - 1 business day, bankDate + 4 business days]. */
+// Widened from -1 to -3 business days after real statement data: a refund can show on Amazon's
+// side up to a couple of days before the bank actually posts the credit (a purchase's bank post
+// tends to follow Amazon closely, but a refund's does not) — a real -2-business-day gap between
+// an Amazon refund and its bank posting fell just outside the original -1 bound.
+const LOWER_BOUND_BUSINESS_DAYS = -3;
+const UPPER_BOUND_BUSINESS_DAYS = 4;
+
+/** True if `amazonDate` falls within [bankDate - 3 business days, bankDate + 4 business days]. */
 export function withinMatchWindow(bankDateIso: string, amazonDateIso: string): boolean {
   const bank = parseIsoDateUtc(bankDateIso);
-  const lo = addBusinessDays(bank, -1);
-  const hi = addBusinessDays(bank, 4);
+  const lo = addBusinessDays(bank, LOWER_BOUND_BUSINESS_DAYS);
+  const hi = addBusinessDays(bank, UPPER_BOUND_BUSINESS_DAYS);
   const az = parseIsoDateUtc(amazonDateIso);
   return az.getTime() >= lo.getTime() && az.getTime() <= hi.getTime();
 }
