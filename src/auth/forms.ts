@@ -3,7 +3,7 @@ import type { Cheerio } from 'cheerio';
 import { selectOne, cleanupHtmlText, type Root } from '../html';
 import * as sel from './selectors';
 import type { Selector } from './selectors';
-import { AmazonOrdersAuthError, AmazonOrdersError } from '../errors';
+import { AmazonOrdersAuthError, AmazonOrdersBrowserChallengeError, AmazonOrdersError } from '../errors';
 import type { AuthIO } from './io';
 
 export interface PageResponse {
@@ -205,11 +205,11 @@ export class AcicAuthBlocker extends AuthForm {
 
   override select(page: PageResponse): boolean {
     if (page.$(sel.ACIC_CHALLENGE_SELECTOR).length) {
-      throw new AmazonOrdersAuthError(
-        'Amazon returned a JavaScript-based identity challenge (ACIC) that this HTTP-only library cannot ' +
-          'solve. This would require driving a real browser (e.g. Playwright) — not implemented, since it has ' +
-          "not been needed against amazon.ca in testing so far. If you hit this, it means Amazon flagged the " +
-          'session as suspicious; try again later or from a different network.',
+      throw new AmazonOrdersBrowserChallengeError(
+        'Amazon returned a JavaScript-based identity challenge (ACIC) that plain HTTP cannot solve. Install ' +
+          'the optional browser fallback: `npm install playwright && npx playwright install chromium` — ' +
+          'AmazonSession will then drive a real browser to clear this automatically. Without it, try again ' +
+          'later or from a different network.',
       );
     }
     return false;
@@ -230,10 +230,10 @@ export class JsAuthBlocker extends AuthForm {
 
   override select(page: PageResponse): boolean {
     if (JS_ROBOT_TEXT_REGEX.test(page.$.root().text())) {
-      throw new AmazonOrdersAuthError(
-        'Amazon returned a JavaScript-based bot challenge that this HTTP-only library cannot solve. This would ' +
-          'require driving a real browser (e.g. Playwright) — not implemented, since it has not been needed ' +
-          'against amazon.ca in testing so far. If you hit this, try again later or from a different network.',
+      throw new AmazonOrdersBrowserChallengeError(
+        'Amazon returned a JavaScript-based bot challenge (e.g. an AWS WAF challenge) that plain HTTP cannot ' +
+          'solve. Install the optional browser fallback: `npm install playwright && npx playwright install ' +
+          'chromium` — AmazonSession will then drive a real browser to clear this automatically.',
       );
     }
     return false;

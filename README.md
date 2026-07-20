@@ -1,8 +1,9 @@
 # amazon-orders-ts
 
-Fetch Amazon order & transaction history over plain HTTP (no browser automation) and match it
-against your bank transactions — built for personal finance reconciliation (e.g.
-[LedgerNest](https://github.com/mhlavenka/ledgerNest)).
+Fetch Amazon order & transaction history and match it against your bank transactions — built for
+personal finance reconciliation (e.g. [LedgerNest](https://github.com/mhlavenka/ledgerNest)).
+Plain HTTP by default; falls back to a real (Playwright) browser only if Amazon serves a
+JS-based bot challenge it can't otherwise clear.
 
 This is a **TypeScript port of the login flow and page-parsing approach** from the Python
 [`amazon-orders`](https://github.com/alexdlaird/amazon-orders) project by Alex Laird (MIT
@@ -16,16 +17,33 @@ Defaults to **amazon.ca**, configurable via `domain`.
 
 ## Status / scope notes
 
-- The parsers were built from the Python project's own selectors and real (sanitized)
-  `amazon.com` test fixtures — including one transaction-history fixture that already uses
-  `.ca`-formatted currency. They have **not yet been run against a live amazon.ca session**.
-  Before relying on this for real data, run the smoke test below and compare.
-- This library never auto-solves captchas and never drives a real browser. If Amazon serves a
-  JavaScript-based bot challenge (ACIC / "Enable JavaScript" interstitial), it surfaces a clear
-  error explaining that — solving it would require something like Playwright, which is not
-  implemented here (see `src/auth/forms.ts`).
+- **Confirmed against a live amazon.ca session (2026-07-20)**: the very first anonymous request
+  gets served a real AWS WAF JavaScript challenge (`awswaf.com/challenge.js`) — a puzzle only
+  solvable by executing real JS. Login itself is still 100% plain HTTP; the browser only
+  bootstraps past this one gate (see "Browser fallback" below), then hands off to the normal
+  HTTP flow for everything else. The order/transaction *parsers* haven't been verified against
+  real markup yet — that's the next step once login succeeds end-to-end.
+- This library never auto-solves visual/text captchas. If Amazon presents an actual CAPTCHA
+  during sign-in (as opposed to the JS/bot challenge above), it's surfaced to you interactively.
 - Login is always interactive and is never retried unattended: if your session expires,
   every call fails fast with an error telling you to re-run `login`.
+
+### Browser fallback (optional)
+
+If Amazon serves a JS/bot challenge (like the AWS WAF one above) that plain HTTP can't solve,
+`AmazonSession` can drive a real Chromium browser through Playwright to clear it, then copy the
+resulting cookies back into the normal HTTP session — confirmed working against the live
+challenge above. Playwright is an **optional peer dependency**, not installed by default:
+
+```bash
+npm install playwright
+npx playwright install chromium
+```
+
+With that installed, the fallback triggers automatically (`config.browserFallback` defaults to
+`true`) — no code changes needed. Without it, the original clear error is thrown instead, telling
+you how to enable it. `amazon-orders-ts login --headed` runs the fallback browser visibly instead
+of headless (`--no-browser-fallback` disables it entirely).
 
 ## Install
 

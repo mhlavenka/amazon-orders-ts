@@ -12,6 +12,17 @@ export interface AmazonOrdersConfig {
   matchDbPath: string;
   /** Max login attempts before giving up (mirrors amazon-orders' max_auth_attempts). */
   maxAuthAttempts: number;
+  /**
+   * If Amazon serves a JS/bot challenge (e.g. AWS WAF) plain HTTP can't solve, and Playwright is
+   * installed (`npm install playwright && npx playwright install chromium` — it's an optional
+   * peer dependency, not a hard one), automatically drive a real browser to clear it and copy
+   * the resulting cookies back into the HTTP session. If Playwright isn't installed, the
+   * original clear error is thrown instead — set this false to always throw immediately.
+   */
+  browserFallback: boolean;
+  /** Whether the Playwright fallback browser runs headless. Some bot checks specifically target
+   * headless fingerprints — set false to run a visible browser if headless fails to pass. */
+  browserHeadless: boolean;
 }
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.ledgernest', 'amazon');
@@ -24,6 +35,8 @@ export function defaultConfig(overrides: Partial<AmazonOrdersConfig> = {}): Amaz
     cookieJarPath: path.join(configDir, 'cookies.json'),
     matchDbPath: path.join(configDir, 'matches.sqlite'),
     maxAuthAttempts: 10,
+    browserFallback: true,
+    browserHeadless: true,
     ...overrides,
   };
 }

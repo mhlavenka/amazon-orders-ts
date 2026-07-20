@@ -21,8 +21,13 @@ program
   .command('login')
   .description('Interactively log in to Amazon and persist the session cookie jar for later commands.')
   .option('--domain <domain>', 'Amazon domain', 'amazon.ca')
-  .action(async (opts: { domain: string }) => {
-    const session = new AmazonSession({ domain: opts.domain });
+  .option('--no-browser-fallback', "Don't fall back to a Playwright browser if Amazon serves a JS/bot challenge")
+  .option('--headed', 'Run the Playwright browser fallback visibly instead of headless')
+  .action(async (opts: { domain: string; browserFallback: boolean; headed?: boolean }) => {
+    const session = new AmazonSession({
+      domain: opts.domain,
+      config: { browserFallback: opts.browserFallback, browserHeadless: !opts.headed },
+    });
     await session.login();
     console.log(`Logged in and saved session to ${session.config.cookieJarPath}`);
   });

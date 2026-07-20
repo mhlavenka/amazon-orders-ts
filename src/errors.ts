@@ -29,6 +29,20 @@ export class AmazonOrdersAuthRedirectError extends AmazonOrdersAuthError {
   }
 }
 
+/**
+ * Raised specifically by the ACIC/JS-bot blockers when Amazon serves a JavaScript-based
+ * challenge (e.g. an AWS WAF challenge) that plain HTTP can't solve. Distinct from the base
+ * AmazonOrdersAuthError so callers (and AmazonSession's own optional browser fallback) can
+ * catch this specific case without swallowing unrelated auth failures like a wrong password.
+ */
+export class AmazonOrdersBrowserChallengeError extends AmazonOrdersAuthError {
+  constructor(message: string, meta?: Record<string, unknown>) {
+    super(message);
+    this.name = 'AmazonOrdersBrowserChallengeError';
+    this.meta = meta;
+  }
+}
+
 export class AmazonOrdersNotFoundError extends AmazonOrdersError {
   constructor(message: string, meta?: Record<string, unknown>) {
     super(message);

@@ -5,9 +5,15 @@ import { defaultConfig, type AmazonOrdersConfig } from '../config';
 import { buildConstants, type Constants } from './constants';
 import * as sel from './selectors';
 import { parseHtml, selectOne, type Root } from '../html';
-import { AmazonOrdersAuthError, AmazonOrdersAuthRedirectError, AmazonOrdersError } from '../errors';
+import {
+  AmazonOrdersAuthError,
+  AmazonOrdersAuthRedirectError,
+  AmazonOrdersBrowserChallengeError,
+  AmazonOrdersError,
+} from '../errors';
 import { ConsoleIO, type AuthIO } from './io';
 import { defaultAuthForms, type AuthForm, type FormSubmitter, type PageResponse } from './forms';
+import { bootstrapCookiesViaBrowser } from './browserBootstrap';
 
 // Node's global `fetch` is undici under the hood (Node >=18); we drive it manually with
 // redirect: 'manual' rather than letting it auto-follow, because auto-follow only exposes the
@@ -241,13 +247,29 @@ export class AmazonSession implements FormSubmitter {
    * the resulting page, or null if nothing matched. Blockers (ACIC/JS-challenge detection) throw
    * directly from `select()`, so calling this is also how those get a chance to fire — including
    * on unauthenticated pages, where Amazon can present a bot challenge before login even starts.
+   *
+   * If a blocker throws AmazonOrdersBrowserChallengeError and `browserFallback` is enabled, this
+   * drives a real (Playwright) browser through `page.url` once to clear the challenge, copies the
+   * resulting cookies into the jar, and retries the SAME url via plain HTTP — once only, so a
+   * challenge the browser fallback can't clear either still surfaces as a real error rather than
+   * looping.
    */
   private async processForms(page: PageResponse): Promise<PageResponse | null> {
-    const matched = this.authForms.find((form) => form.select(page));
-    if (!matched) return null;
+    try {
+      const matched = this.authForms.find((form) => form.select(page));
+      if (!matched) return null;
 
-    await matched.fill(this);
-    return matched.submit(page, this);
+      await matched.fill(this);
+      return await matched.submit(page, this);
+    } catch (err) {
+      if (err instanceof AmazonOrdersBrowserChallengeError && this.config.browserFallback) {
+        this.io.echo(`${err.message}\nAttempting the browser fallback...`);
+        await bootstrapCookiesViaBrowser(page.url, this.cookieJar, this.config.browserHeadless);
+        this.persistCookies();
+        return this.get(page.url);
+      }
+      throw err;
+    }
   }
 
   private async provisionCookies(): Promise<void> {

@@ -53,6 +53,14 @@
     "csv-parse": "^5.5.6",
     "tough-cookie": "^4.1.4"
   },
+  "peerDependencies": {
+    "playwright": "^1.47.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/tough-cookie": "^4.0.5",
