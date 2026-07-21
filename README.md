@@ -28,6 +28,11 @@ Defaults to **amazon.ca**, configurable via `domain`.
   yourself).
 - Login is always interactive and is never retried unattended: if your session expires,
   every call fails fast with an error telling you to re-run `login`.
+- **`getItemCategory` (product-page category breadcrumb) is new and not yet verified against a
+  live account** — everything else above has been confirmed end-to-end against real amazon.ca
+  data; this one selector (`#wayfinding-breadcrumbs_feature_div`) is Amazon's standard, widely
+  documented product-page structure but hasn't been spot-checked live yet. Treat it as
+  best-effort until it has (it already fails soft — returns `null` rather than throwing).
 
 ### Browser fallback (optional)
 
@@ -69,6 +74,27 @@ const orders = await getOrderHistory(session, { year: 2026 }); // add fullDetail
 
 Re-running `session.login()` reuses the persisted cookie jar; if it's stale, `checkResponse()`
 throws `AmazonOrdersAuthRedirectError` telling you to log in again — it will not retry silently.
+
+### Item category (optional, one extra request per new item)
+
+Neither `getTransactionHistory` nor `getOrderHistory` carries a product category — the order
+list and an order's own details page only ever have title/price/quantity. The real category
+(e.g. `Industrial & Scientific › Test, Measure & Inspect › Pressure & Vacuum › Pressure & Vacuum
+Gauges › Pressure Switches`) lives on the item's own product page, so getting it means one more
+fetch per item — `getItemCategory` does that fetch and returns the breadcrumb, root-first:
+
+```ts
+import { getItemCategory } from 'amazon-orders-ts';
+
+const item = order.items[0]; // { title, asin, link, price, quantity }
+const breadcrumb = item.link ? await getItemCategory(session, item.link) : null;
+// breadcrumb -> ["Industrial & Scientific", "Test, Measure & Inspect", ...] or null
+```
+
+A product's category never changes, so a host app should cache the result by `asin` (including a
+`null`/empty result, so a page that doesn't parse isn't retried on every run) rather than call
+this on every lookup. Best-effort like everything else here: resolves to `null` instead of
+throwing if the page can't be fetched or no breadcrumb is found.
 
 ## CLI (thin wrapper for manual testing)
 
@@ -160,6 +186,8 @@ const result = findAmazonMatchForTransaction(bankTxn, pool, orders);
 
 if (result.matched) {
   // result.items -> ["USB-C Cable", "Kitchen Sponges"], result.isRefund, result.confidence, ...
+  // result.matchedItems -> same items with { title, asin, link } — feed to getItemCategory() above
+  // for a real category instead of guessing from the title text.
   store.saveMatches([{ bankTxnId: bankTxn.id, amazonTxnIds: result.amazonTxnIds, confidence: result.confidence!, pass: result.pass! }]);
 } else if (result.ambiguousCandidates) {
   // multiple equally-plausible Amazon transactions — surface for manual review, don't guess

@@ -40,9 +40,12 @@ step for consumers.
   email/password/OTP prompts, masked password input).
 - `src/parsing/` — `orders.ts`, `transactions.ts` (page parsers, cheerio-based), `parsable.ts`
   (the `simpleParse`/`required` helpers every field goes through — `required()` throws naming the
-  field, per the "fail loudly" requirement).
+  field, per the "fail loudly" requirement), `productCategory.ts` (an item's own product-page
+  category breadcrumb — see gap note below, unverified live).
 - `src/orders.ts` / `src/transactions.ts` (top-level, not `parsing/`) — pagination/orchestration
   that combines a live `AmazonSession` with the pure parsers above.
+- `src/productCategory.ts` (top-level) — `getItemCategory(session, link)`, the live-fetch wrapper
+  around `parsing/productCategory.ts`.
 - `src/matching/` — the pure, no-network matching engine. `match.ts` (3-pass algorithm: exact →
   tie-break → combination), `lookup.ts` (`findAmazonMatchForTransaction` — the one-row-at-a-time
   API LedgerNest actually calls), `store.ts` (`node:sqlite`-backed idempotent persistence),
@@ -77,6 +80,13 @@ step for consumers.
 - Order-details full fetch (`--full-details` / `getOrderHistory({ fullDetails: true })`) is
   implemented but still untested against real markup — everything verified so far used the
   default (`fullDetails: false`) history-page-only parsing.
+- `getItemCategory` / `parsing/productCategory.ts` (2026-07-21) — fetches an item's own product
+  page for its category breadcrumb (neither order-history nor order-details carries one; confirmed
+  by grepping `reference/`'s fixtures — the breadcrumb present on the order-details page is just
+  "Your Account › Your Orders" nav chrome). Reads `#wayfinding-breadcrumbs_feature_div`, Amazon's
+  standard product-page structure, but **not yet verified against a live account** like everything
+  else here was — next live session should exercise this and fix selectors against real markup if
+  it doesn't parse.
 - No CI workflow yet (`.github/workflows/` is empty) — add one before/at first npm publish.
 
 ## Working notes for future sessions

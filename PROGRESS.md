@@ -215,3 +215,31 @@ produces `dist/`).
   the same way (inspect real markup/cookies from a live session), so don't assume amazon.ca's
   values (`caflex`, `x-acbca`) generalize to other TLDs.
 - No CI workflow.
+
+## 2026-07-21 — Item category (product-page breadcrumb)
+
+LedgerNest's Amazon-item categorization was title-keyword guessing only (e.g. a pressure switch
+had nothing to match on) — root cause: neither the order-history list nor an order's own details
+page carries a category, only the item's own product page does (confirmed by grepping the
+Python-port's reference HTML fixtures — the order-details breadcrumb present there is just
+"Your Account › Your Orders" page-nav chrome, not a product category).
+
+Added:
+- `src/parsing/productCategory.ts` — `parseProductCategoryPage(html)`, reads
+  `#wayfinding-breadcrumbs_feature_div` (Amazon's standard product-page breadcrumb container;
+  `#wayfinding-breadcrumbs_container` as a fallback selector), returns the crumb list root-first
+  or `null`.
+- `src/productCategory.ts` — `getItemCategory(session, link)`, fetches the page and parses it;
+  resolves to `null` (never throws) on any failure, matching this library's enrichment-not-
+  requirement posture elsewhere.
+- `AmazonOrderRef.items` (matching module) now carries `asin`/`link` alongside `title`, and
+  `findAmazonMatchForTransaction`'s result gained `matchedItems` (same shape) so a caller can look
+  up each matched item's own category page. `items: string[]` (titles only) kept as-is for
+  back-compat.
+- Exported `getItemCategory` / `parseProductCategoryPage` from the package root.
+
+**Not yet verified against a live account** — everything else in this repo was fixed by iterating
+against real amazon.ca responses; this selector hasn't had that pass yet. It's the standard,
+widely-documented product-page structure, but treat it as unconfirmed until an actual live MBNA
+import exercises it (LedgerNest caches by ASIN, so this only needs to work once per distinct item
+to be useful going forward — see `AmazonItemCategory.model.ts` on the LedgerNest side).

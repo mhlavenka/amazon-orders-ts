@@ -1,5 +1,5 @@
 import { matchTransactions, type MatchOptions } from './match';
-import { itemTitlesForOrder } from './items';
+import { itemTitlesForOrder, itemsForOrder } from './items';
 import type { AmazonOrderRef, AmazonTransaction, BankTransaction, Confidence, MatchPass } from './types';
 
 export interface TransactionMatchLookup {
@@ -12,6 +12,8 @@ export interface TransactionMatchLookup {
   orderNumbers: string[];
   /** Item titles across all matched order(s) — the "what was purchased" for this transaction. */
   items: string[];
+  /** Same items, with asin/link when known — lets a caller look up each item's own category page. */
+  matchedItems: AmazonOrderRef['items'];
   /** Present when unmatched because multiple equally-plausible Amazon transactions were found. */
   ambiguousCandidates?: AmazonTransaction[];
 }
@@ -41,6 +43,7 @@ export function findAmazonMatchForTransaction(
 
     const orderNumbers = [...new Set(matchedTxns.map((t) => t.orderNumber).filter((o): o is string => o !== null))];
     const items = orderNumbers.flatMap((on) => itemTitlesForOrder(orders, on));
+    const matchedItems = orderNumbers.flatMap((on) => itemsForOrder(orders, on));
 
     return {
       matched: true,
@@ -50,12 +53,13 @@ export function findAmazonMatchForTransaction(
       amazonTxnIds: m.amazonTxnIds,
       orderNumbers,
       items,
+      matchedItems,
     };
   }
 
   if (report.reviewQueue.length) {
-    return { matched: false, amazonTxnIds: [], orderNumbers: [], items: [], ambiguousCandidates: report.reviewQueue[0].candidates };
+    return { matched: false, amazonTxnIds: [], orderNumbers: [], items: [], matchedItems: [], ambiguousCandidates: report.reviewQueue[0].candidates };
   }
 
-  return { matched: false, amazonTxnIds: [], orderNumbers: [], items: [] };
+  return { matched: false, amazonTxnIds: [], orderNumbers: [], items: [], matchedItems: [] };
 }

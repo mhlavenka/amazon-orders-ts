@@ -12,7 +12,9 @@ export {
 
 export { parseTransactionsPage, type TransactionPageResult } from './parsing/transactions';
 export { parseOrderHistoryPage, parseOrderDetailsPage, type OrderHistoryPageResult } from './parsing/orders';
+export { parseProductCategoryPage } from './parsing/productCategory';
 export type { Order, Item, Transaction } from './parsing/types';
 
 export { getOrderHistory, type OrderHistoryOptions } from './orders';
 export { getTransactionHistory, type TransactionHistoryOptions } from './transactions';
+export { getItemCategory } from './productCategory';

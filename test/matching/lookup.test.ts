@@ -44,7 +44,7 @@ describe('findAmazonMatchForTransaction', () => {
     const bankTxn = bank({ id: 'b1', date: '2026-06-05', amount: -19.99 });
     const result = findAmazonMatchForTransaction(bankTxn, [], orders);
 
-    expect(result).toEqual({ matched: false, amazonTxnIds: [], orderNumbers: [], items: [] });
+    expect(result).toEqual({ matched: false, amazonTxnIds: [], orderNumbers: [], items: [], matchedItems: [] });
   });
 
   it('surfaces ambiguous candidates instead of guessing', () => {

@@ -17,7 +17,7 @@ export interface AmazonTransaction {
 
 export interface AmazonOrderRef {
   orderNumber: string;
-  items: { title: string }[];
+  items: { title: string; asin?: string | null; link?: string | null }[];
 }
 
 export type Confidence = 'high' | 'medium' | 'low';
