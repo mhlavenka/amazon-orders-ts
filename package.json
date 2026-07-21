@@ -40,6 +40,8 @@
   },
   "files": [
     "dist",
+    "matching.js",
+    "matching.d.ts",
     "LICENSE",
     "NOTICE",
     "README.md"
