@@ -60,12 +60,27 @@ interface ParseOrderOptions {
   orderNumberFallback?: string;
 }
 
+// Amazon's order-history *list* page rolled out client-side rendering for most of an order
+// card's content (a "SiegeClientSideDecryption" script tag appears per card — presumably an
+// anti-scraping measure), so none of FIELD_ORDER_NUMBER_SELECTORS' text-based candidates match
+// there any more. The order number survives in plain text regardless, though: the card's own
+// container carries `data-csa-c-slot-id="amzn1.yourorders.order-card.<order number>"`. This is a
+// fallback, not a replacement — the order-*details* page (a different page, fetched separately)
+// is unaffected and still parses via the normal text selectors.
+function orderNumberFromSlotId($: Root, el: AnyNode): string | null {
+  const slotId = $(el).attr('data-csa-c-slot-id');
+  // Digital orders (ebooks, apps, other digital content) use a letter-prefixed id like
+  // "D01-1234567-1234567" instead of the usual all-numeric "701-1234567-1234567".
+  const m = slotId ? /order-card\.([A-Z0-9]{3}-\d{7}-\d{7})$/.exec(slotId) : null;
+  return m ? m[1] : null;
+}
+
 function parseOrderTag($: Root, el: AnyNode, opts: ParseOrderOptions): Order {
   const cancelled = select($, el, sel.ORDER_SKIP_TOTALS).length > 0;
   const skipped = select($, el, sel.ORDER_SKIP_ITEMS).length > 0;
 
   const orderNumberText = simpleParse($, el, sel.FIELD_ORDER_NUMBER_SELECTORS) as string | null;
-  let orderNumber = parseOrderNumber(orderNumberText);
+  let orderNumber = parseOrderNumber(orderNumberText) ?? orderNumberFromSlotId($, el);
   if (!orderNumber && opts.orderNumberFallback) orderNumber = opts.orderNumberFallback;
   if (!orderNumber && !cancelled) {
     throw new AmazonOrdersParseError(

@@ -243,3 +243,44 @@ against real amazon.ca responses; this selector hasn't had that pass yet. It's t
 widely-documented product-page structure, but treat it as unconfirmed until an actual live MBNA
 import exercises it (LedgerNest caches by ASIN, so this only needs to work once per distinct item
 to be useful going forward — see `AmazonItemCategory.model.ts` on the LedgerNest side).
+
+## 2026-07-21 (later) — Order-history list page went client-rendered; live-verified end to end
+
+The item-category work above got its live test, and it surfaced that the order-history *list*
+page itself had changed for this account: a `SiegeClientSideDecryption` script now appears per
+order card, and the card's own content (item titles, price, date) is no longer in the server-sent
+HTML at all — only the order *number* survives, in a `data-csa-c-slot-id` attribute on the card's
+own container (`amzn1.yourorders.order-card.<order number>`), confirmed by fetching a real page
+with a real connected session and grepping for it directly (not guessed). The order *details*
+page (a different, per-order fetch) is unaffected and still has everything in plain HTML.
+
+Fixes, both live-verified against real captured HTML:
+- `parseOrderTag()` (`src/parsing/orders.ts`) now falls back to the `data-csa-c-slot-id` attribute
+  for the order number when the text selectors miss. Also broadened the number format to
+  `[A-Z0-9]{3}-\d{7}-\d{7}` — digital orders (ebooks, apps) use a letter-prefixed id like
+  `D01-1234567-1234567`, not the usual all-numeric one; the stricter regex threw on the first one
+  encountered.
+- New `getOrderDetails(session, orderNumber)` and `getOrderDetailsBatch(session, orderNumbers[])`
+  (`src/orders.ts`) — fetch details for a *specific, known* set of orders, rather than every order
+  in a period. `getOrderHistory({ fullDetails: true })` is now built on top of this (no behavior
+  change there), but the real point is letting a caller that already knows which orders it needs
+  (e.g. LedgerNest, after matching bank rows against cheap list-page data) avoid fetching every
+  order's details to service one or two matches — the original all-or-nothing `fullDetails: true`
+  turned a single-row lookup into ~1.5 minutes for an account with dozens of orders. Paced (300–
+  800ms between requests) and stops rather than throws if Amazon bounces the session mid-batch,
+  keeping whatever was already fetched.
+
+**A separate, more fundamental discovery**: Amazon also has a dedicated re-authentication gate
+specifically for the order-history page — a redirect to `/ap/signin` carrying
+`openid.assoc_handle=amzn_retail_yourorders_ca` (a purpose-specific handle, distinct from normal
+sign-in's regional one) and `openid.pape.max_auth_age=0` (demanding auth "right now," not relying
+on session recency). Verified two ways: (1) a cookie jar exported from an already-logged-in real
+Chrome browser hits it reliably; a session from `amazon-orders-ts login`'s own fresh interactive
+login does not, even though both pass this library's own `hasStoredSession()` check identically —
+so it isn't about cookie validity, it's about *how* the session was minted. (2) Visiting
+amazon.ca → "Your Orders" directly in the real browser immediately before exporting cookies from
+it (browser-extension flow, LedgerNest side) reliably avoids the gate for at least several minutes
+afterward — strongly suggesting the trigger is a recency/trust signal that a real page visit
+refreshes and plain cookie possession alone doesn't. This library doesn't attempt to solve the
+gate itself (no browser automation here — see NOTICE/README scope) — it's a caller-side concern
+for whoever is sourcing the cookie jar.

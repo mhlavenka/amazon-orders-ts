@@ -77,16 +77,25 @@ step for consumers.
   claiming it did, and `COOKIES_SET_WHEN_AUTHENTICATED` checking for `x-main` when amazon.ca
   actually uses `x-acbca`. The match window's lower bound was also widened (-1 → -3 business days)
   after real data showed a refund posting to the bank a couple of days after its Amazon-side date.
-- Order-details full fetch (`--full-details` / `getOrderHistory({ fullDetails: true })`) is
-  implemented but still untested against real markup — everything verified so far used the
-  default (`fullDetails: false`) history-page-only parsing.
-- `getItemCategory` / `parsing/productCategory.ts` (2026-07-21) — fetches an item's own product
-  page for its category breadcrumb (neither order-history nor order-details carries one; confirmed
-  by grepping `reference/`'s fixtures — the breadcrumb present on the order-details page is just
-  "Your Account › Your Orders" nav chrome). Reads `#wayfinding-breadcrumbs_feature_div`, Amazon's
-  standard product-page structure, but **not yet verified against a live account** like everything
-  else here was — next live session should exercise this and fix selectors against real markup if
-  it doesn't parse.
+- Order-details full fetch (`getOrderHistory({ fullDetails: true })` / `getOrderDetails` /
+  `getOrderDetailsBatch`) is now live-verified — see PROGRESS.md's 2026-07-21 (later) entry. Use
+  `getOrderDetailsBatch(session, orderNumbers)` when you already know which specific orders you
+  need (matched against bank data, say) rather than `fullDetails: true`, which fetches *every*
+  order in the period regardless of relevance and can take minutes for an account with dozens of
+  orders.
+- `getItemCategory` / `parsing/productCategory.ts` (2026-07-21) — **now live-verified.** Fetches an
+  item's own product page for its category breadcrumb (neither order-history nor order-details
+  carries one). The order-history *list* page also turned out to be client-rendered for this
+  account (`SiegeClientSideDecryption`) — order number now falls back to a `data-csa-c-slot-id`
+  attribute when the text selectors miss; see PROGRESS.md for the full finding.
+- **Order-history has its own re-authentication gate**, separate from normal login expiry: a
+  redirect to `/ap/signin?openid.assoc_handle=amzn_retail_yourorders_ca&openid.pape.max_auth_age=0`.
+  A session minted by this library's own fresh `login()` satisfies it; a cookie jar exported from
+  an already-logged-in real browser often doesn't, even though both pass `hasStoredSession()`
+  identically — so it's about how the session was minted, not whether the cookies parse as valid.
+  This library doesn't try to solve it (no browser automation for this — out of scope, see
+  NOTICE/README); it's on the caller sourcing the cookie jar to land one that satisfies it. See
+  PROGRESS.md's 2026-07-21 (later) entry for the full investigation and what worked around it.
 - No CI workflow yet (`.github/workflows/` is empty) — add one before/at first npm publish.
 
 ## Working notes for future sessions

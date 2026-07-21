@@ -28,11 +28,19 @@ Defaults to **amazon.ca**, configurable via `domain`.
   yourself).
 - Login is always interactive and is never retried unattended: if your session expires,
   every call fails fast with an error telling you to re-run `login`.
-- **`getItemCategory` (product-page category breadcrumb) is new and not yet verified against a
-  live account** — everything else above has been confirmed end-to-end against real amazon.ca
-  data; this one selector (`#wayfinding-breadcrumbs_feature_div`) is Amazon's standard, widely
-  documented product-page structure but hasn't been spot-checked live yet. Treat it as
-  best-effort until it has (it already fails soft — returns `null` rather than throwing).
+- **`getItemCategory` (product-page category breadcrumb) is now live-verified**, alongside a
+  related discovery: the order-history *list* page can be client-rendered (a
+  `SiegeClientSideDecryption` script per card) with item/price/date missing from the raw HTML
+  entirely — only the order number survives, in a `data-csa-c-slot-id` attribute, which parsing
+  now falls back to. The order *details* page (fetched separately, per order) is unaffected. See
+  PROGRESS.md's 2026-07-21 entries for the full investigation.
+- **Order-history has its own re-authentication gate**, distinct from normal session expiry — a
+  redirect carrying `openid.assoc_handle=amzn_retail_yourorders_ca&openid.pape.max_auth_age=0`.
+  A session from this library's own fresh `login()` satisfies it; a cookie jar exported from an
+  already-logged-in real browser sometimes doesn't, even though both pass `hasStoredSession()`
+  identically. This library doesn't attempt to solve the gate (no browser automation for it) —
+  it's a caller-side concern for whoever sources the cookie jar. See PROGRESS.md for what's been
+  observed to work around it.
 
 ### Browser fallback (optional)
 
@@ -63,13 +71,18 @@ native/C++ build step needed to install this package).
 ## Quick start (library)
 
 ```ts
-import { AmazonSession, getTransactionHistory, getOrderHistory } from 'amazon-orders-ts';
+import { AmazonSession, getTransactionHistory, getOrderHistory, getOrderDetailsBatch } from 'amazon-orders-ts';
 
 const session = new AmazonSession({ domain: 'amazon.ca' }); // prompts for email/password/OTP on first run
 await session.login(); // persists cookies to ~/.ledgernest/amazon/cookies.json
 
 const transactions = await getTransactionHistory(session, { days: 90 });
-const orders = await getOrderHistory(session, { year: 2026 }); // add fullDetails: true for items on cancelled/partial orders
+const orders = await getOrderHistory(session, { year: 2026 }); // order number/date/total — cheap, no items
+
+// Items/prices may not be in the list page at all any more for some accounts (see "Status / scope
+// notes" above) — fetch them separately, and only for orders you actually need (e.g. ones matched
+// against bank data), not fullDetails: true for the whole period, which is one request per order:
+const details = await getOrderDetailsBatch(session, ['701-1234567-1234567']);
 ```
 
 Re-running `session.login()` reuses the persisted cookie jar; if it's stale, `checkResponse()`

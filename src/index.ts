@@ -15,6 +15,6 @@ export { parseOrderHistoryPage, parseOrderDetailsPage, type OrderHistoryPageResu
 export { parseProductCategoryPage } from './parsing/productCategory';
 export type { Order, Item, Transaction } from './parsing/types';
 
-export { getOrderHistory, type OrderHistoryOptions } from './orders';
+export { getOrderHistory, getOrderDetails, getOrderDetailsBatch, type OrderHistoryOptions } from './orders';
 export { getTransactionHistory, type TransactionHistoryOptions } from './transactions';
 export { getItemCategory } from './productCategory';
